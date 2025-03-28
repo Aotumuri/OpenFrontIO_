@@ -1,38 +1,55 @@
-import { LitElement, html } from "lit";
+import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
-
-// Import language files
-import enTranslations from "../../resources/lang/en.json";
-import bgTranslations from "../../resources/lang/bg.json";
-import jaTranslations from "../../resources/lang/ja.json";
-import frTranslations from "../../resources/lang/fr.json";
-import nlTranslations from "../../resources/lang/nl.json";
-import deTranslations from "../../resources/lang/de.json";
-import esTranslations from "../../resources/lang/es.json";
-
-const translations = {
-  en: enTranslations,
-  bg: bgTranslations,
-  ja: jaTranslations,
-  fr: frTranslations,
-  nl: nlTranslations,
-  de: deTranslations,
-  es: esTranslations,
-};
 
 @customElement("lang-selector")
 export class LangSelector extends LitElement {
-  @state() public translations: any = {};
+  @state() private translations: any = {};
   @state() private defaultTranslations: any = {};
   @state() private currentLang: string = "en";
+  @state() private languageList: any[] = [];
+  @state() private showModal: boolean = false;
+  @state() private debugMode: boolean = false;
+
+  private dKeyPressed: boolean = false;
+
+  static styles = css`
+    .modal {
+      @apply fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center;
+    }
+    .modal.hidden {
+      display: none;
+    }
+    .modal-content {
+      @apply bg-white rounded-lg shadow-lg p-6 w-96 max-w-full;
+    }
+    .lang-button {
+      @apply w-full flex items-center gap-2 p-2 rounded hover:bg-blue-100 transition;
+    }
+    .lang-button.active {
+      @apply bg-blue-200;
+    }
+    .close-button {
+      @apply mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded;
+    }
+  `;
 
   createRenderRoot() {
-    return this;
+    return this; // Use Light DOM if you prefer this
   }
 
   connectedCallback() {
     super.connectedCallback();
+    this.setupDebugKey();
     this.initializeLanguage();
+  }
+
+  private setupDebugKey() {
+    window.addEventListener("keydown", (e) => {
+      if (e.key.toLowerCase() === "d") this.dKeyPressed = true;
+    });
+    window.addEventListener("keyup", (e) => {
+      if (e.key.toLowerCase() === "d") this.dKeyPressed = false;
+    });
   }
 
   private async initializeLanguage() {
@@ -44,18 +61,60 @@ export class LangSelector extends LitElement {
     this.translations = await this.loadLanguage(userLang);
     this.currentLang = userLang;
 
+    await this.loadLanguageList();
     this.applyTranslation(this.translations);
   }
 
-  private async loadLanguage(lang: string): Promise<any> {
+  private async loadLanguage(lang: string) {
     try {
-      const translation = translations[lang as keyof typeof translations];
-      if (!translation) throw new Error(`Language file not found: ${lang}`);
-      return translation;
-    } catch (error) {
-      console.error("🚨 Translation load error:", error);
+      const response = await fetch(`/lang/${lang}.json`);
+      if (!response.ok) throw new Error(`Missing language: ${lang}`);
+      return await response.json();
+    } catch (err) {
+      console.error("Language load failed:", err);
       return {};
     }
+  }
+
+  private async loadLanguageList() {
+    try {
+      const res = await fetch("/lang/index.json");
+      const data = await res.json();
+      const list: any[] = [];
+
+      for (const langCode of data.languages) {
+        const langData = await this.loadLanguage(langCode);
+        if (!langData?.lang) continue;
+        list.push({
+          code: langCode,
+          native: langData.lang.native ?? langCode,
+          en: langData.lang.en ?? langCode,
+          svg: langData.lang.svg ?? langCode,
+        });
+      }
+
+      if (this.dKeyPressed) {
+        list.push({
+          code: "debug",
+          native: "Debug",
+          en: "Debug",
+          svg: "debug",
+        });
+        this.debugMode = true;
+      }
+
+      this.languageList = list;
+    } catch (err) {
+      console.error("言語リストの読み込みに失敗しました:", err);
+    }
+  }
+
+  private async changeLanguage(lang: string) {
+    localStorage.setItem("lang", lang);
+    this.translations = await this.loadLanguage(lang);
+    this.currentLang = lang;
+    this.applyTranslation(this.translations);
+    this.showModal = false;
   }
 
   private applyTranslation(translations: any) {
@@ -73,18 +132,22 @@ export class LangSelector extends LitElement {
       "help-modal",
       "username-input",
       "public-lobby",
+      "o-modal",
+      "o-button",
     ];
 
     document.title = translations.main?.title || document.title;
 
     document.querySelectorAll("[data-i18n]").forEach((element) => {
       const key = element.getAttribute("data-i18n");
-      const keys = key.split(".");
+      const keys = key?.split(".") || [];
       let text = translations;
+
       for (const k of keys) {
         text = text?.[k];
         if (!text) break;
       }
+
       if (!text && this.defaultTranslations) {
         let fallback = this.defaultTranslations;
         for (const k of keys) {
@@ -93,88 +156,66 @@ export class LangSelector extends LitElement {
         }
         text = fallback;
       }
+
       if (text) {
         element.innerHTML = text;
       } else {
-        console.warn(`Missing translation key: ${key}`);
+        console.warn(`翻訳キーが見つかりません: ${key}`);
       }
     });
 
-    components.forEach((tagName) => {
-      const el = document.querySelector(tagName) as any;
-      if (el && typeof el.requestUpdate === "function") {
-        el.requestUpdate();
-      } else {
-        console.warn(
-          `requestUpdate() not available on <${tagName}> or element not found.`,
-        );
-      }
+    components.forEach((tag) => {
+      document.querySelectorAll(tag).forEach((el) => {
+        if (typeof (el as any).requestUpdate === "function") {
+          (el as any).requestUpdate();
+        }
+      });
     });
   }
 
-  public translateText(
-    key: string,
-    params: Record<string, string | number> = {},
-  ): string {
-    const keys = key.split(".");
-    let text: any = this.translations;
-
-    for (const k of keys) {
-      text = text?.[k];
-      if (!text) break;
-    }
-
-    if (!text && this.defaultTranslations) {
-      text = this.defaultTranslations;
-      for (const k of keys) {
-        text = text?.[k];
-        if (!text) return key;
-      }
-    }
-
-    for (const [param, value] of Object.entries(params)) {
-      text = text.replace(`{${param}}`, String(value));
-    }
-
-    return text;
-  }
-
-  private async changeLanguage(lang: string) {
-    localStorage.setItem("lang", lang);
-    this.translations = await this.loadLanguage(lang);
-    this.currentLang = lang;
-    this.applyTranslation(this.translations);
+  private openModal() {
+    this.debugMode = this.dKeyPressed;
+    this.showModal = true;
+    this.loadLanguageList();
   }
 
   render() {
     return html`
-      <select
-        @change=${(e: Event) =>
-          this.changeLanguage((e.target as HTMLSelectElement).value)}
-        class="text-center appearance-none w-full bg-blue-100 hover:bg-blue-200 text-blue-900 p-3 sm:p-4 lg:p-5 font-medium text-sm sm:text-base lg:text-lg rounded-md border-none cursor-pointer transition-colors duration-300"
+      <button
+        class="text-center bg-blue-100 hover:bg-blue-200 text-blue-900 p-3 rounded-md font-medium"
+        @click=${this.openModal}
       >
-        <option value="en" ?selected=${this.currentLang === "en"}>
-          English
-        </option>
-        <option value="bg" ?selected=${this.currentLang === "bg"}>
-          Български
-        </option>
-        <option value="ja" ?selected=${this.currentLang === "ja"}>
-          日本語
-        </option>
-        <option value="fr" ?selected=${this.currentLang === "fr"}>
-          Français
-        </option>
-        <option value="nl" ?selected=${this.currentLang === "nl"}>
-          Nederlands
-        </option>
-        <option value="de" ?selected=${this.currentLang === "de"}>
-          Deutsch
-        </option>
-        <option value="es" ?selected=${this.currentLang === "es"}>
-          Español
-        </option>
-      </select>
+        言語を選ぶ
+      </button>
+
+      <!-- モーダル -->
+      <div id="language-modal" class="modal ${this.showModal ? "" : "hidden"}">
+        <div class="modal-content">
+          <h2 class="text-xl font-semibold mb-4">Select Language</h2>
+          <div id="language-list" class="space-y-2 max-h-80 overflow-y-auto">
+            ${this.languageList.map(
+              (lang) => html`
+                <button
+                  class="lang-button ${this.currentLang === lang.code
+                    ? "active"
+                    : ""}"
+                  @click=${() => this.changeLanguage(lang.code)}
+                >
+                  <img
+                    src="/flags/${lang.svg}.svg"
+                    class="w-6 h-4"
+                    alt="${lang.code}"
+                  />
+                  <span>${lang.native} (${lang.en})</span>
+                </button>
+              `,
+            )}
+          </div>
+          <button class="close-button" @click=${() => (this.showModal = false)}>
+            Close
+          </button>
+        </div>
+      </div>
     `;
   }
 }
