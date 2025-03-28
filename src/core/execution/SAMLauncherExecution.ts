@@ -57,6 +57,10 @@ export class SAMLauncherExecution implements Execution {
       return;
     }
 
+    if (this.player != this.post.owner()) {
+      this.player = this.post.owner();
+    }
+
     if (!this.pseudoRandom) {
       this.pseudoRandom = new PseudoRandom(this.post.id());
     }
@@ -68,8 +72,7 @@ export class SAMLauncherExecution implements Execution {
       ])
       .filter(
         ({ unit }) =>
-          unit.owner() !== this.player &&
-          !unit.owner().isAlliedWith(this.player),
+          unit.owner() !== this.player && !this.player.isFriendly(unit.owner()),
       );
 
     this.target =
@@ -131,10 +134,6 @@ export class SAMLauncherExecution implements Execution {
         );
       }
     }
-  }
-
-  owner(): Player {
-    return null;
   }
 
   isActive(): boolean {
