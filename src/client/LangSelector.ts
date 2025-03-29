@@ -1,9 +1,10 @@
 import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import "./LanguageModal";
 
 @customElement("lang-selector")
 export class LangSelector extends LitElement {
-  @state() private translations: any = {};
+  @state() public translations: any = {};
   @state() private defaultTranslations: any = {};
   @state() private currentLang: string = "en";
   @state() private languageList: any[] = [];
@@ -14,22 +15,51 @@ export class LangSelector extends LitElement {
 
   static styles = css`
     .modal {
-      @apply fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center;
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 50;
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
     .modal.hidden {
       display: none;
     }
     .modal-content {
-      @apply bg-white rounded-lg shadow-lg p-6 w-96 max-w-full;
+      background-color: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+      padding: 1.5rem;
+      width: 24rem;
+      max-width: 100%;
     }
     .lang-button {
-      @apply w-full flex items-center gap-2 p-2 rounded hover:bg-blue-100 transition;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 0.375rem;
+      transition: background-color 0.3s;
+    }
+    .lang-button:hover {
+      background-color: #ebf8ff;
     }
     .lang-button.active {
-      @apply bg-blue-200;
+      background-color: #bee3f8;
     }
     .close-button {
-      @apply mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded;
+      margin-top: 1rem;
+      width: 100%;
+      background-color: #3182ce;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 0.375rem;
+      cursor: pointer;
+    }
+    .close-button:hover {
+      background-color: #2b6cb0;
     }
   `;
 
@@ -80,7 +110,9 @@ export class LangSelector extends LitElement {
     try {
       const res = await fetch("/lang/index.json");
       const data = await res.json();
-      const list: any[] = [];
+      let list: any[] = [];
+
+      const browserLang = new Intl.Locale(navigator.language).language;
 
       for (const langCode of data.languages) {
         const langData = await this.loadLanguage(langCode);
@@ -93,17 +125,46 @@ export class LangSelector extends LitElement {
         });
       }
 
+      // debug は最後に入れるため別で管理
+      let debugLang: any = null;
       if (this.dKeyPressed) {
-        list.push({
+        debugLang = {
           code: "debug",
           native: "Debug",
           en: "Debug",
-          svg: "debug",
-        });
+          svg: "xx",
+        };
         this.debugMode = true;
       }
 
-      this.languageList = list;
+      const currentLangEntry = list.find((l) => l.code === this.currentLang);
+      const browserLangEntry =
+        browserLang !== this.currentLang && browserLang !== "en"
+          ? list.find((l) => l.code === browserLang)
+          : undefined;
+      const englishEntry =
+        this.currentLang !== "en"
+          ? list.find((l) => l.code === "en")
+          : undefined;
+
+      list = list.filter(
+        (l) =>
+          l.code !== this.currentLang &&
+          l.code !== browserLang &&
+          l.code !== "en" &&
+          l.code !== "debug",
+      );
+
+      list.sort((a, b) => a.en.localeCompare(b.en));
+
+      const finalList: any[] = [];
+      if (currentLangEntry) finalList.push(currentLangEntry);
+      if (englishEntry) finalList.push(englishEntry);
+      if (browserLangEntry) finalList.push(browserLangEntry);
+      finalList.push(...list);
+      if (debugLang) finalList.push(debugLang);
+
+      this.languageList = finalList;
     } catch (err) {
       console.error("言語リストの読み込みに失敗しました:", err);
     }
@@ -173,6 +234,33 @@ export class LangSelector extends LitElement {
     });
   }
 
+  public translateText(
+    key: string,
+    params: Record<string, string | number> = {},
+  ): string {
+    const keys = key.split(".");
+    let text: any = this.translations;
+
+    for (const k of keys) {
+      text = text?.[k];
+      if (!text) break;
+    }
+
+    if (!text && this.defaultTranslations) {
+      text = this.defaultTranslations;
+      for (const k of keys) {
+        text = text?.[k];
+        if (!text) return key;
+      }
+    }
+
+    for (const [param, value] of Object.entries(params)) {
+      text = text.replace(`{${param}}`, String(value));
+    }
+
+    return text;
+  }
+
   private openModal() {
     this.debugMode = this.dKeyPressed;
     this.showModal = true;
@@ -181,41 +269,25 @@ export class LangSelector extends LitElement {
 
   render() {
     return html`
-      <button
-        class="text-center bg-blue-100 hover:bg-blue-200 text-blue-900 p-3 rounded-md font-medium"
-        @click=${this.openModal}
-      >
-        言語を選ぶ
-      </button>
-
-      <!-- モーダル -->
-      <div id="language-modal" class="modal ${this.showModal ? "" : "hidden"}">
-        <div class="modal-content">
-          <h2 class="text-xl font-semibold mb-4">Select Language</h2>
-          <div id="language-list" class="space-y-2 max-h-80 overflow-y-auto">
-            ${this.languageList.map(
-              (lang) => html`
-                <button
-                  class="lang-button ${this.currentLang === lang.code
-                    ? "active"
-                    : ""}"
-                  @click=${() => this.changeLanguage(lang.code)}
-                >
-                  <img
-                    src="/flags/${lang.svg}.svg"
-                    class="w-6 h-4"
-                    alt="${lang.code}"
-                  />
-                  <span>${lang.native} (${lang.en})</span>
-                </button>
-              `,
-            )}
-          </div>
-          <button class="close-button" @click=${() => (this.showModal = false)}>
-            Close
-          </button>
-        </div>
+      <div class="container__row">
+        <button
+          id="lang-selector"
+          @click=${this.openModal}
+          class="text-center appearance-none w-full bg-blue-100 hover:bg-blue-200 text-blue-900 p-3 sm:p-4 lg:p-5 font-medium text-sm sm:text-base lg:text-lg rounded-md border-none cursor-pointer transition-colors duration-300 flex items-center gap-2 justify-center"
+        >
+          <img id="lang-flag" class="w-6 h-4" src="/flags/xx.svg" alt="flag" />
+          <span id="lang-name">English (English)</span>
+        </button>
       </div>
+
+      <language-modal
+        .visible=${this.showModal}
+        .languageList=${this.languageList}
+        .currentLang=${this.currentLang}
+        @language-selected=${(e: CustomEvent) =>
+          this.changeLanguage(e.detail.lang)}
+        @close-modal=${() => (this.showModal = false)}
+      ></language-modal>
     `;
   }
 }
