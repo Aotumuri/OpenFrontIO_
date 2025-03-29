@@ -125,7 +125,6 @@ export class LangSelector extends LitElement {
         });
       }
 
-      // debug は最後に入れるため別で管理
       let debugLang: any = null;
       if (this.dKeyPressed) {
         debugLang = {
@@ -166,7 +165,7 @@ export class LangSelector extends LitElement {
 
       this.languageList = finalList;
     } catch (err) {
-      console.error("言語リストの読み込みに失敗しました:", err);
+      console.error("Failed to load language list:", err);
     }
   }
 
@@ -221,7 +220,7 @@ export class LangSelector extends LitElement {
       if (text) {
         element.innerHTML = text;
       } else {
-        console.warn(`翻訳キーが見つかりません: ${key}`);
+        console.warn(`Translation key not found: ${key}`);
       }
     });
 
@@ -268,6 +267,21 @@ export class LangSelector extends LitElement {
   }
 
   render() {
+    const currentLang =
+      this.languageList.find((l) => l.code === this.currentLang) ??
+      (this.currentLang === "debug"
+        ? {
+            code: "debug",
+            native: "Debug",
+            en: "Debug",
+            svg: "xx",
+          }
+        : {
+            native: "English",
+            en: "English",
+            svg: "xx",
+          });
+
     return html`
       <div class="container__row">
         <button
@@ -275,8 +289,13 @@ export class LangSelector extends LitElement {
           @click=${this.openModal}
           class="text-center appearance-none w-full bg-blue-100 hover:bg-blue-200 text-blue-900 p-3 sm:p-4 lg:p-5 font-medium text-sm sm:text-base lg:text-lg rounded-md border-none cursor-pointer transition-colors duration-300 flex items-center gap-2 justify-center"
         >
-          <img id="lang-flag" class="w-6 h-4" src="/flags/xx.svg" alt="flag" />
-          <span id="lang-name">English (English)</span>
+          <img
+            id="lang-flag"
+            class="w-6 h-4"
+            src="/flags/${currentLang.svg}.svg"
+            alt="flag"
+          />
+          <span id="lang-name">${currentLang.native} (${currentLang.en})</span>
         </button>
       </div>
 
