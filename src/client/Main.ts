@@ -27,6 +27,7 @@ import "./components/baseComponents/Button";
 import "./components/baseComponents/Modal";
 import { GameStartingModal } from "./gameStartingModal";
 import "./styles.css";
+import { LanguageModal } from "./LanguageModal";
 
 export interface JoinLobbyEvent {
   clientID: string;
@@ -56,8 +57,14 @@ class Client {
     const langSelector = document.querySelector(
       "lang-selector",
     ) as LangSelector;
+    const LanguageModal = document.querySelector(
+      "lang-selector",
+    ) as LanguageModal;
     if (!langSelector) {
       consolex.warn("Lang selector element not found");
+    }
+    if (!LanguageModal) {
+      consolex.warn("Language modal element not found");
     }
 
     this.flagInput = document.querySelector("flag-input") as FlagInput;
