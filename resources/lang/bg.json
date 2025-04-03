@@ -168,7 +168,7 @@
     "svg": "bg",
     "lang_code": "bg"
   },
-  "mode": {
+  "game_mode": {
     "ffa": "Свободна игра (FFA)",
     "team": "Отбори"
   }

@@ -168,7 +168,7 @@
     "svg": "ua",
     "lang_code": "uk"
   },
-  "mode": {
+  "game_mode": {
     "ffa": "Вільна гра (FFA)",
     "team": "Команди"
   }

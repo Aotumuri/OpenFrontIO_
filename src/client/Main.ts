@@ -17,6 +17,7 @@ import { HostLobbyModal as HostPrivateLobbyModal } from "./HostLobbyModal";
 import { JoinPrivateLobbyModal } from "./JoinPrivateLobbyModal";
 import "./LangSelector";
 import { LangSelector } from "./LangSelector";
+import { LanguageModal } from "./LanguageModal";
 import "./PublicLobby";
 import { PublicLobby } from "./PublicLobby";
 import { SinglePlayerModal } from "./SinglePlayerModal";
@@ -27,7 +28,6 @@ import "./components/baseComponents/Button";
 import "./components/baseComponents/Modal";
 import { GameStartingModal } from "./gameStartingModal";
 import "./styles.css";
-import { LanguageModal } from "./LanguageModal";
 
 export interface JoinLobbyEvent {
   clientID: string;
