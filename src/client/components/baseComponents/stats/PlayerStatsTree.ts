@@ -105,7 +105,7 @@ export class PlayerStatsTreeView extends LitElement {
     const leaf = this.getSelectedLeaf();
     const wlr = leaf
       ? leaf.losses === 0n
-        ? leaf.wins
+        ? Number(leaf.wins)
         : Number(leaf.wins) / Number(leaf.losses)
       : 0;
 
@@ -184,7 +184,7 @@ export class PlayerStatsTreeView extends LitElement {
               .values=${[
                 renderNumber(leaf.wins),
                 renderNumber(leaf.losses),
-                renderNumber(wlr),
+                wlr.toFixed(2),
                 renderNumber(leaf.total),
                 translateText("player_modal.not_applicable"),
                 translateText("player_modal.not_applicable"),
