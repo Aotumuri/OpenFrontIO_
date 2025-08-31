@@ -1,6 +1,6 @@
+import { BotBehavior, EMOJI_HECKLE } from "./utils/BotBehavior";
 import {
   Cell,
-  Difficulty,
   Execution,
   Game,
   Gold,
@@ -15,8 +15,7 @@ import {
   UnitType,
 } from "../game/Game";
 import { TileRef, euclDistFN, manhattanDistFN } from "../game/GameMap";
-import { calculateBoundingBox, flattenedEmojiTable, simpleHash } from "../Util";
-import { BotBehavior } from "./utils/BotBehavior";
+import { calculateBoundingBox, simpleHash } from "../Util";
 import { ConstructionExecution } from "./ConstructionExecution";
 import { EmojiExecution } from "./EmojiExecution";
 import { GameID } from "../Schemas";
@@ -43,7 +42,6 @@ export class FakeHumanExecution implements Execution {
   private readonly lastEmojiSent = new Map<Player, Tick>();
   private readonly lastNukeSent: [Tick, TileRef][] = [];
   private readonly embargoMalusApplied = new Set<PlayerID>();
-  private readonly heckleEmoji: number[];
 
   constructor(
     gameID: GameID,
@@ -54,10 +52,9 @@ export class FakeHumanExecution implements Execution {
     );
     this.attackRate = this.random.nextInt(40, 80);
     this.attackTick = this.random.nextInt(0, this.attackRate);
-    this.triggerRatio = this.random.nextInt(60, 90) / 100;
-    this.reserveRatio = this.random.nextInt(30, 60) / 100;
-    this.expandRatio = this.random.nextInt(15, 25) / 100;
-    this.heckleEmoji = ["🤡", "😡"].map((e) => flattenedEmojiTable.indexOf(e));
+    this.triggerRatio = this.random.nextInt(50, 60) / 100;
+    this.reserveRatio = this.random.nextInt(30, 40) / 100;
+    this.expandRatio = this.random.nextInt(10, 20) / 100;
   }
 
   init(mg: Game) {
@@ -207,22 +204,12 @@ export class FakeHumanExecution implements Execution {
       const toAlly = this.random.randElement(enemies);
       if (this.player.canSendAllianceRequest(toAlly)) {
         this.player.createAllianceRequest(toAlly);
-        return;
       }
-    }
-
-    // 50-50 attack weakest player vs random player
-    const toAttack = this.random.chance(2)
-      ? enemies[0]
-      : this.random.randElement(enemies);
-    if (this.shouldAttack(toAttack)) {
-      this.behavior.sendAttack(toAttack);
-      return;
     }
 
     this.behavior.forgetOldEnemies();
     this.behavior.assistAllies();
-    const enemy = this.behavior.selectEnemy();
+    const enemy = this.behavior.selectEnemy(enemies);
     if (!enemy) return;
     this.maybeSendEmoji(enemy);
     this.maybeSendNuke(enemy);
@@ -231,43 +218,6 @@ export class FakeHumanExecution implements Execution {
     } else {
       this.maybeSendBoatAttack(enemy);
     }
-  }
-
-  private shouldAttack(other: Player): boolean {
-    if (this.player === null) throw new Error("Not initialized");
-    if (this.player.isOnSameTeam(other)) {
-      return false;
-    }
-    if (this.player.isFriendly(other)) {
-      if (this.shouldDiscourageAttack(other)) {
-        return this.random.chance(200);
-      }
-      return this.random.chance(50);
-    } else {
-      if (this.shouldDiscourageAttack(other)) {
-        return this.random.chance(4);
-      }
-      return true;
-    }
-  }
-
-  private shouldDiscourageAttack(other: Player) {
-    if (other.isTraitor()) {
-      return false;
-    }
-    if (this.mg === undefined) throw new Error("Not initialized");
-    const { difficulty } = this.mg.config().gameConfig();
-    if (
-      difficulty === Difficulty.Hard ||
-      difficulty === Difficulty.Impossible
-    ) {
-      return false;
-    }
-    if (other.type() !== PlayerType.Human) {
-      return false;
-    }
-    // Only discourage attacks on Humans who are not traitors on easy or medium difficulty.
-    return true;
   }
 
   private maybeSendEmoji(enemy: Player) {
@@ -281,7 +231,7 @@ export class FakeHumanExecution implements Execution {
       new EmojiExecution(
         this.player,
         enemy.id(),
-        this.random.randElement(this.heckleEmoji),
+        this.random.randElement(EMOJI_HECKLE),
       ),
     );
   }
