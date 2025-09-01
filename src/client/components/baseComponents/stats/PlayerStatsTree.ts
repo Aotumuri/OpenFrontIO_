@@ -178,16 +178,12 @@ export class PlayerStatsTreeView extends LitElement {
                 translateText("player_modal.stats_losses"),
                 translateText("player_modal.stats_wlr"),
                 translateText("player_modal.stats_games_played"),
-                translateText("player_modal.stats_play_time"),
-                translateText("player_modal.stats_last_active"),
               ]}
               .values=${[
                 renderNumber(leaf.wins),
                 renderNumber(leaf.losses),
                 wlr.toFixed(2),
                 renderNumber(leaf.total),
-                translateText("player_modal.not_applicable"),
-                translateText("player_modal.not_applicable"),
               ]}
             ></player-stats-grid>
 

@@ -11,7 +11,7 @@ export class PlayerStatsGrid extends LitElement {
     }
     @media (min-width: 640px) {
       .grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
       }
     }
     .stat {
@@ -35,7 +35,7 @@ export class PlayerStatsGrid extends LitElement {
   render() {
     return html`
       <div class="grid mb-2">
-        ${Array(6)
+        ${Array(4)
           .fill(0)
           .map(
             (_, i) => html`
