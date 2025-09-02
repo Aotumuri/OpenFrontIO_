@@ -2,7 +2,6 @@ import "./components/baseComponents/stats/DiscordUserHeader";
 import "./components/baseComponents/stats/GameList";
 import "./components/baseComponents/stats/PlayerStatsTable";
 import "./components/baseComponents/stats/PlayerStatsTree";
-import { Difficulty, GameMode, GameType, isGameMode } from "../core/game/Game";
 import { LitElement, html } from "lit";
 import {
   PlayerGame,
