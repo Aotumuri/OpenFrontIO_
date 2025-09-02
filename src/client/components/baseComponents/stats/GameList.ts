@@ -7,6 +7,12 @@ import { translateText } from "../../../Utils";
 @customElement("game-list")
 export class GameList extends LitElement {
   static styles = css`
+    .section-title {
+      color: #888;
+      font-size: 1rem;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
     .card {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -59,7 +65,9 @@ export class GameList extends LitElement {
   render() {
     return html` <div class="mt-4 w-full max-w-md">
       <div class="text-sm text-gray-400 font-semibold mb-1">
-        🎮 ${translateText("player_modal.recent_games")}
+        <div class="section-title">
+          🎮 ${translateText("player_modal.recent_games")}
+        </div>
         <div class="flex flex-col gap-2">
           ${this.games.map(
             (game) => html`
