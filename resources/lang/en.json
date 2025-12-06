@@ -413,7 +413,15 @@
     "exit_game_label": "Exit Game",
     "exit_game_info": "Return to main menu",
     "background_music_volume": "Background Music Volume",
-    "sound_effects_volume": "Sound Effects Volume"
+    "sound_effects_volume": "Sound Effects Volume",
+    "reset_all_settings": "Reset all settings",
+    "reset_all_settings_warning": "This will remove all your saved settings and keybinds. Continue?",
+    "reset_all_settings_confirm": "Reset everything",
+    "reset_all_settings_cancel": "Keep my settings",
+    "reset_settings": "Reset settings",
+    "reset_settings_warning": "This will remove all saved settings. Continue?",
+    "reset_keybinds": "Reset keybinds",
+    "reset_keybinds_warning": "This will remove all custom keybinds. Continue?"
   },
   "chat": {
     "title": "Quick Chat",

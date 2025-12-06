@@ -1,10 +1,12 @@
 import { LitElement, html } from "lit";
 import { customElement, query, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { translateText } from "../client/Utils";
 import { UserSettings } from "../core/game/UserSettings";
 import "./components/baseComponents/setting/SettingKeybind";
 import { SettingKeybind } from "./components/baseComponents/setting/SettingKeybind";
 import "./components/baseComponents/setting/SettingNumber";
+import "./components/baseComponents/setting/SettingResetAll";
 import "./components/baseComponents/setting/SettingSlider";
 import "./components/baseComponents/setting/SettingToggle";
 
@@ -18,6 +20,7 @@ export class UserSettingModal extends LitElement {
 
   @state() private keySequence: string[] = [];
   @state() private showEasterEggSettings = false;
+  @state() private resetNonce = 0;
 
   connectedCallback() {
     super.connectedCallback();
@@ -234,6 +237,45 @@ export class UserSettingModal extends LitElement {
     localStorage.setItem("settings.keybinds", JSON.stringify(this.keybinds));
   }
 
+  private handleResetSettings() {
+    const keysToRemove = [
+      "settings.darkMode",
+      "settings.emojis",
+      "settings.alertFrame",
+      "settings.specialEffects",
+      "settings.structureSprites",
+      "settings.leftClickOpensMenu",
+      "settings.performanceOverlay",
+      "settings.anonymousNames",
+      "settings.lobbyIdVisibility",
+      "settings.territoryPatterns",
+      "settings.attackRatio",
+      "settings.troopRatio",
+      "settings.territoryColor",
+      "settings.backgroundMusicVolume",
+      "settings.soundEffectsVolume",
+      "settings.focusLocked",
+      "territoryPattern",
+      "dev-pattern",
+      "dev-primary",
+      "dev-secondary",
+    ];
+
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+
+    this.userSettings = new UserSettings();
+    document.documentElement.classList.remove("dark");
+    this.resetNonce++;
+    this.requestUpdate();
+  }
+
+  private handleResetKeybinds() {
+    localStorage.removeItem("settings.keybinds");
+    this.keybinds = {};
+    this.resetNonce++;
+    this.requestUpdate();
+  }
+
   render() {
     return html`
       <o-modal title="${translateText("user_setting.title")}">
@@ -260,11 +302,14 @@ export class UserSettingModal extends LitElement {
               </button>
             </div>
 
-            <div class="settings-list">
-              ${this.settingsMode === "basic"
-                ? this.renderBasicSettings()
-                : this.renderKeybindSettings()}
-            </div>
+            ${keyed(
+              this.resetNonce,
+              html`<div class="settings-list">
+                ${this.settingsMode === "basic"
+                  ? this.renderBasicSettings()
+                  : this.renderKeybindSettings()}
+              </div>`,
+            )}
           </div>
         </div>
       </o-modal>
@@ -418,6 +463,14 @@ export class UserSettingModal extends LitElement {
             ></setting-number>
           `
         : null}
+
+      <setting-reset-all
+        label=${translateText("user_setting.reset_settings")}
+        warning=${translateText("user_setting.reset_settings_warning")}
+        confirmLabel=${translateText("user_setting.reset_all_settings_confirm")}
+        cancelLabel=${translateText("user_setting.reset_all_settings_cancel")}
+        @reset-all-settings=${() => this.handleResetSettings()}
+      ></setting-reset-all>
     `;
   }
 
@@ -644,6 +697,14 @@ export class UserSettingModal extends LitElement {
         .value=${this.keybinds["moveRight"]?.key ?? ""}
         @change=${this.handleKeybindChange}
       ></setting-keybind>
+
+      <setting-reset-all
+        label=${translateText("user_setting.reset_keybinds")}
+        warning=${translateText("user_setting.reset_keybinds_warning")}
+        confirmLabel=${translateText("user_setting.reset_all_settings_confirm")}
+        cancelLabel=${translateText("user_setting.reset_all_settings_cancel")}
+        @reset-all-settings=${() => this.handleResetKeybinds()}
+      ></setting-reset-all>
     `;
   }
 
