@@ -202,6 +202,16 @@
     "starting_gold": "Starting gold",
     "starting_gold_placeholder": "5000000"
   },
+  "generated_map": {
+    "title": "Generated Map",
+    "description": "Generate Perlin-noise islands from a seed.",
+    "seed": "Seed",
+    "seed_placeholder": "islands-2026",
+    "nation_count_hint": "Nation count hint (optional)",
+    "nation_count_hint_placeholder": "Auto",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
   "token_login_modal": {
     "title": "Logging in...",
     "logging_in": "Logging in...",

@@ -11,7 +11,7 @@ import {
   HumansVsNations,
   UnitType,
 } from "../core/game/Game";
-import { TeamCountConfig } from "../core/Schemas";
+import { GameConfig, TeamCountConfig } from "../core/Schemas";
 import { generateID } from "../core/Util";
 import { hasLinkedAccount } from "./Api";
 import "./components/baseComponents/Button";
@@ -33,6 +33,7 @@ import {
   preventDisallowedKeys,
   toOptionalNumber,
 } from "./utilities/GameConfigHelpers";
+import { resolveGeneratedMap } from "./utilities/GeneratedMapResolver";
 
 const DEFAULT_OPTIONS = {
   selectedMap: GameMapType.World,
@@ -47,6 +48,8 @@ const DEFAULT_OPTIONS = {
   instantBuild: false,
   randomSpawn: false,
   useRandomMap: false,
+  useGeneratedMap: false,
+  generatedNationCountHint: undefined as number | undefined,
   gameMode: GameMode.FFA,
   teamCount: 2 as TeamCountConfig,
   goldMultiplier: false,
@@ -72,6 +75,12 @@ export class SinglePlayerModal extends BaseModal {
   @state() private instantBuild: boolean = DEFAULT_OPTIONS.instantBuild;
   @state() private randomSpawn: boolean = DEFAULT_OPTIONS.randomSpawn;
   @state() private useRandomMap: boolean = DEFAULT_OPTIONS.useRandomMap;
+  @state() private useGeneratedMap: boolean = DEFAULT_OPTIONS.useGeneratedMap;
+  @state() private generatedMapSeed: string = generateID();
+  @state() private generatedNationCountHint: number | undefined =
+    DEFAULT_OPTIONS.generatedNationCountHint;
+  @state() private isStartingGame: boolean = false;
+  @state() private isGeneratingMap: boolean = false;
   @state() private gameMode: GameMode = DEFAULT_OPTIONS.gameMode;
   @state() private teamCount: TeamCountConfig = DEFAULT_OPTIONS.teamCount;
   @state() private showAchievements: boolean = false;
@@ -259,9 +268,13 @@ export class SinglePlayerModal extends BaseModal {
             .settings=${{
               map: {
                 selected: this.selectedMap,
-                useRandom: this.useRandomMap,
+                useRandom: this.useGeneratedMap ? false : this.useRandomMap,
                 showMedals: this.showAchievements,
                 mapWins: this.mapWins,
+                generated: {
+                  enabled: this.useGeneratedMap,
+                  panel: this.renderGeneratedMapPanel(),
+                },
               },
               difficulty: {
                 selected: this.selectedDifficulty,
@@ -318,6 +331,7 @@ export class SinglePlayerModal extends BaseModal {
             }}
             @map-selected=${this.handleConfigMapSelected}
             @random-map-selected=${this.handleConfigRandomMapSelected}
+            @generated-map-mode-changed=${this.handleGeneratedMapModeChanged}
             @difficulty-selected=${this.handleConfigDifficultySelected}
             @game-mode-selected=${this.handleConfigGameModeSelected}
             @team-count-selected=${this.handleConfigTeamCountSelected}
@@ -338,9 +352,12 @@ export class SinglePlayerModal extends BaseModal {
             : null}
           <button
             @click=${this.startGame}
-            class="w-full py-4 text-sm font-bold text-white uppercase tracking-widest bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 hover:-translate-y-0.5 active:translate-y-0"
+            ?disabled=${this.isStartingGame}
+            class="w-full py-4 text-sm font-bold text-white uppercase tracking-widest bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 hover:-translate-y-0.5 active:translate-y-0 disabled:transform-none"
           >
-            ${translateText("single_modal.start")}
+            ${this.isGeneratingMap
+              ? translateText("map_component.loading")
+              : translateText("single_modal.start")}
           </button>
         </div>
       </div>
@@ -374,6 +391,7 @@ export class SinglePlayerModal extends BaseModal {
       this.maxTimer !== DEFAULT_OPTIONS.maxTimer ||
       this.instantBuild !== DEFAULT_OPTIONS.instantBuild ||
       this.randomSpawn !== DEFAULT_OPTIONS.randomSpawn ||
+      this.useGeneratedMap !== DEFAULT_OPTIONS.useGeneratedMap ||
       this.gameMode !== DEFAULT_OPTIONS.gameMode ||
       this.goldMultiplier !== DEFAULT_OPTIONS.goldMultiplier ||
       this.startingGold !== DEFAULT_OPTIONS.startingGold ||
@@ -397,6 +415,11 @@ export class SinglePlayerModal extends BaseModal {
     this.instantBuild = DEFAULT_OPTIONS.instantBuild;
     this.randomSpawn = DEFAULT_OPTIONS.randomSpawn;
     this.teamCount = DEFAULT_OPTIONS.teamCount;
+    this.useGeneratedMap = DEFAULT_OPTIONS.useGeneratedMap;
+    this.generatedMapSeed = generateID();
+    this.generatedNationCountHint = DEFAULT_OPTIONS.generatedNationCountHint;
+    this.isStartingGame = false;
+    this.isGeneratingMap = false;
     this.disabledUnits = [...DEFAULT_OPTIONS.disabledUnits];
     this.goldMultiplier = DEFAULT_OPTIONS.goldMultiplier;
     this.goldMultiplierValue = DEFAULT_OPTIONS.goldMultiplierValue;
@@ -405,6 +428,9 @@ export class SinglePlayerModal extends BaseModal {
   }
 
   private handleSelectRandomMap() {
+    if (this.useGeneratedMap) {
+      return;
+    }
     this.useRandomMap = true;
   }
 
@@ -413,6 +439,9 @@ export class SinglePlayerModal extends BaseModal {
   };
 
   private handleMapSelection(value: GameMapType) {
+    if (this.useGeneratedMap) {
+      return;
+    }
     this.selectedMap = value;
     this.useRandomMap = false;
   }
@@ -582,7 +611,102 @@ export class SinglePlayerModal extends BaseModal {
     this.teamCount = value;
   }
 
+  private setGeneratedMapEnabled(enabled: boolean) {
+    if (this.useGeneratedMap === enabled) {
+      return;
+    }
+
+    this.useGeneratedMap = enabled;
+    if (enabled) {
+      this.useRandomMap = false;
+      if (!this.generatedMapSeed.trim()) {
+        this.generatedMapSeed = generateID();
+      }
+    }
+  }
+
+  private handleGeneratedMapModeChanged = (e: Event) => {
+    const customEvent = e as CustomEvent<{ enabled: boolean }>;
+    this.setGeneratedMapEnabled(customEvent.detail.enabled);
+  };
+
+  private handleGeneratedMapSeedChange = (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    const trimmed = input.value.trim();
+    this.generatedMapSeed = trimmed || generateID();
+  };
+
+  private handleGeneratedMapNationCountHintKeyDown = (e: KeyboardEvent) => {
+    preventDisallowedKeys(e, ["-", "+", "e", "E", "."]);
+  };
+
+  private handleGeneratedMapNationCountHintChange = (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    const trimmed = input.value.trim();
+    if (!trimmed) {
+      this.generatedNationCountHint = undefined;
+      return;
+    }
+
+    const parsed = parseBoundedIntegerFromInput(input, { min: 1, max: 10000 });
+    if (parsed === undefined) {
+      return;
+    }
+    this.generatedNationCountHint = parsed;
+  };
+
+  private renderGeneratedMapPanel(): TemplateResult {
+    return html`
+      <div>
+        <h4 class="text-sm font-bold text-white uppercase tracking-wider">
+          ${translateText("generated_map.title")}
+        </h4>
+        <p class="text-xs text-white/60 mt-1">
+          ${translateText("generated_map.description")}
+        </p>
+      </div>
+      <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label class="flex flex-col gap-1">
+          <span
+            class="text-xs font-bold uppercase tracking-wider text-white/70"
+          >
+            ${translateText("generated_map.seed")}
+          </span>
+          <input
+            type="text"
+            class="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            .value=${this.generatedMapSeed}
+            placeholder=${translateText("generated_map.seed_placeholder")}
+            @change=${this.handleGeneratedMapSeedChange}
+          />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span
+            class="text-xs font-bold uppercase tracking-wider text-white/70"
+          >
+            ${translateText("generated_map.nation_count_hint")}
+          </span>
+          <input
+            type="number"
+            min="1"
+            max="10000"
+            class="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            .value=${this.generatedNationCountHint?.toString() ?? ""}
+            placeholder=${translateText(
+              "generated_map.nation_count_hint_placeholder",
+            )}
+            @keydown=${this.handleGeneratedMapNationCountHintKeyDown}
+            @change=${this.handleGeneratedMapNationCountHintChange}
+          />
+        </label>
+      </div>
+    `;
+  }
+
   private async startGame() {
+    if (this.isStartingGame) {
+      return;
+    }
     // Validate and clamp maxTimer setting before starting
     let finalMaxTimerValue: number | undefined = undefined;
     if (this.maxTimer) {
@@ -603,83 +727,126 @@ export class SinglePlayerModal extends BaseModal {
       // Clamp value to valid range
       finalMaxTimerValue = Math.max(1, Math.min(120, this.maxTimerValue));
     }
+    this.isStartingGame = true;
+    let startedSuccessfully = false;
 
-    // If random map is selected, choose a random map now
-    if (this.useRandomMap) {
-      this.selectedMap = getRandomMapType();
-    }
+    try {
+      // If random map is selected, choose a random map now
+      if (this.useRandomMap && !this.useGeneratedMap) {
+        this.selectedMap = getRandomMapType();
+      }
 
-    console.log(
-      `Starting single player game with map: ${GameMapType[this.selectedMap as keyof typeof GameMapType]}${this.useRandomMap ? " (Randomly selected)" : ""}`,
-    );
-    const clientID = generateID();
-    const gameID = generateID();
+      console.log(
+        `Starting single player game with map: ${GameMapType[this.selectedMap as keyof typeof GameMapType]}${this.useRandomMap ? " (Randomly selected)" : ""}`,
+      );
+      const clientID = generateID();
+      const gameID = generateID();
+      const gameMapSize = this.compactMap
+        ? GameMapSize.Compact
+        : GameMapSize.Normal;
+      let gameMap: GameMapType = this.selectedMap;
+      let mapRef: NonNullable<GameConfig["mapRef"]> = {
+        kind: "static" as const,
+        map: this.selectedMap,
+      };
 
-    const usernameInput = document.querySelector(
-      "username-input",
-    ) as UsernameInput;
-    if (!usernameInput) {
-      console.warn("Username input element not found");
-    }
+      if (this.useGeneratedMap) {
+        this.isGeneratingMap = true;
+        try {
+          const resolved = await resolveGeneratedMap({
+            gameID,
+            seed: this.generatedMapSeed,
+            mapSize: gameMapSize,
+            nationCountHint: this.generatedNationCountHint,
+          });
+          mapRef = resolved.mapRef;
+          gameMap = resolved.fallbackGameMap;
+        } catch (error) {
+          console.warn(
+            "Failed to resolve generated map for single player",
+            error,
+          );
+        } finally {
+          this.isGeneratingMap = false;
+        }
+      }
 
-    await crazyGamesSDK.requestMidgameAd();
+      const usernameInput = document.querySelector(
+        "username-input",
+      ) as UsernameInput;
+      if (!usernameInput) {
+        console.warn("Username input element not found");
+      }
 
-    this.dispatchEvent(
-      new CustomEvent("join-lobby", {
-        detail: {
-          gameID: gameID,
-          gameStartInfo: {
+      await crazyGamesSDK.requestMidgameAd();
+
+      this.dispatchEvent(
+        new CustomEvent("join-lobby", {
+          detail: {
             gameID: gameID,
-            players: [
-              {
-                clientID,
-                username: usernameInput.getCurrentUsername(),
-                cosmetics: await getPlayerCosmetics(),
+            gameStartInfo: {
+              gameID: gameID,
+              players: [
+                {
+                  clientID,
+                  username: usernameInput.getCurrentUsername(),
+                  cosmetics: await getPlayerCosmetics(),
+                },
+              ],
+              config: {
+                gameMap,
+                mapRef,
+                gameMapSize,
+                gameType: GameType.Singleplayer,
+                gameMode: this.gameMode,
+                playerTeams: this.teamCount,
+                difficulty: this.selectedDifficulty,
+                maxTimerValue: finalMaxTimerValue,
+                bots: this.bots,
+                infiniteGold: this.infiniteGold,
+                donateGold: this.gameMode === GameMode.Team,
+                donateTroops: this.gameMode === GameMode.Team,
+                infiniteTroops: this.infiniteTroops,
+                instantBuild: this.instantBuild,
+                randomSpawn: this.randomSpawn,
+                disabledUnits: this.disabledUnits
+                  .map((u) => Object.values(UnitType).find((ut) => ut === u))
+                  .filter((ut): ut is UnitType => ut !== undefined),
+                ...(this.gameMode === GameMode.Team &&
+                this.teamCount === HumansVsNations
+                  ? {
+                      disableNations: false,
+                    }
+                  : {
+                      disableNations: this.disableNations,
+                    }),
+                ...(this.goldMultiplier && this.goldMultiplierValue
+                  ? { goldMultiplier: this.goldMultiplierValue }
+                  : {}),
+                ...(this.startingGold && this.startingGoldValue !== undefined
+                  ? { startingGold: this.startingGoldValue }
+                  : {}),
               },
-            ],
-            config: {
-              gameMap: this.selectedMap,
-              gameMapSize: this.compactMap
-                ? GameMapSize.Compact
-                : GameMapSize.Normal,
-              gameType: GameType.Singleplayer,
-              gameMode: this.gameMode,
-              playerTeams: this.teamCount,
-              difficulty: this.selectedDifficulty,
-              maxTimerValue: finalMaxTimerValue,
-              bots: this.bots,
-              infiniteGold: this.infiniteGold,
-              donateGold: this.gameMode === GameMode.Team,
-              donateTroops: this.gameMode === GameMode.Team,
-              infiniteTroops: this.infiniteTroops,
-              instantBuild: this.instantBuild,
-              randomSpawn: this.randomSpawn,
-              disabledUnits: this.disabledUnits
-                .map((u) => Object.values(UnitType).find((ut) => ut === u))
-                .filter((ut): ut is UnitType => ut !== undefined),
-              ...(this.gameMode === GameMode.Team &&
-              this.teamCount === HumansVsNations
-                ? {
-                    disableNations: false,
-                  }
-                : {
-                    disableNations: this.disableNations,
-                  }),
-              ...(this.goldMultiplier && this.goldMultiplierValue
-                ? { goldMultiplier: this.goldMultiplierValue }
-                : {}),
-              ...(this.startingGold && this.startingGoldValue !== undefined
-                ? { startingGold: this.startingGoldValue }
-                : {}),
+              lobbyCreatedAt: Date.now(), // ms; server should be authoritative in MP
             },
-            lobbyCreatedAt: Date.now(), // ms; server should be authoritative in MP
-          },
-          source: "singleplayer",
-        } satisfies JoinLobbyEvent,
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    this.close();
+            source: "singleplayer",
+          } satisfies JoinLobbyEvent,
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      startedSuccessfully = true;
+      this.close();
+    } catch (error) {
+      this.isGeneratingMap = false;
+      this.isStartingGame = false;
+      console.error("Failed to start single player game", error);
+      return;
+    } finally {
+      this.isGeneratingMap = false;
+      if (!startedSuccessfully || this.inline) {
+        this.isStartingGame = false;
+      }
+    }
   }
 }

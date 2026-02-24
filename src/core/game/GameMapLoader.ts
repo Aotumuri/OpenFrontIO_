@@ -3,6 +3,7 @@ import { MapManifest } from "./TerrainMapLoader";
 
 export interface GameMapLoader {
   getMapData(map: GameMapType): MapData;
+  getGeneratedMapData(mapId: string): MapData;
 }
 
 export interface MapData {

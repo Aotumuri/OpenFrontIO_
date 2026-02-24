@@ -4,9 +4,11 @@ import { MapManifest } from "./TerrainMapLoader";
 
 export class BinaryLoaderGameMapLoader implements GameMapLoader {
   private maps: Map<GameMapType, MapData>;
+  private generatedMaps: Map<string, MapData>;
 
   constructor() {
     this.maps = new Map<GameMapType, MapData>();
+    this.generatedMaps = new Map<string, MapData>();
   }
 
   private createLazyLoader<T>(importFn: () => Promise<T>): () => Promise<T> {
@@ -58,6 +60,45 @@ export class BinaryLoaderGameMapLoader implements GameMapLoader {
     } satisfies MapData;
 
     this.maps.set(map, mapData);
+    return mapData;
+  }
+
+  getGeneratedMapData(mapId: string): MapData {
+    const cachedMap = this.generatedMaps.get(mapId);
+    if (cachedMap) {
+      return cachedMap;
+    }
+
+    const loadBinary = (url: string) =>
+      fetch(url)
+        .then((res) => {
+          if (!res.ok) throw new Error(`Failed to load ${url}`);
+          return res.arrayBuffer();
+        })
+        .then((buf) => new Uint8Array(buf));
+
+    const mapBasePath = `/maps/generated/${mapId}`;
+
+    const mapData = {
+      mapBin: this.createLazyLoader(() => loadBinary(`${mapBasePath}/map.bin`)),
+      map4xBin: this.createLazyLoader(() =>
+        loadBinary(`${mapBasePath}/map4x.bin`),
+      ),
+      map16xBin: this.createLazyLoader(() =>
+        loadBinary(`${mapBasePath}/map16x.bin`),
+      ),
+      manifest: this.createLazyLoader(() =>
+        fetch(`${mapBasePath}/manifest.json`).then((res) => {
+          if (!res.ok) {
+            throw new Error(`Failed to load ${mapBasePath}/manifest.json`);
+          }
+          return res.json() as Promise<MapManifest>;
+        }),
+      ),
+      webpPath: `${mapBasePath}/thumbnail.webp`,
+    } satisfies MapData;
+
+    this.generatedMaps.set(mapId, mapData);
     return mapData;
   }
 }

@@ -167,6 +167,10 @@ export interface GameConfigSettingsData {
     randomMapDivider?: boolean;
     showMedals?: boolean;
     mapWins?: Map<GameMapType, Set<Difficulty>>;
+    generated?: {
+      enabled: boolean;
+      panel: TemplateResult;
+    };
   };
   difficulty: {
     selected: Difficulty;
@@ -219,6 +223,14 @@ export class GameConfigSettings extends LitElement {
 
   private handleSelectRandom = () => {
     this.emit("random-map-selected", {});
+  };
+
+  private handleSelectGeneratedMode = () => {
+    this.emit("generated-map-mode-changed", { enabled: true });
+  };
+
+  private handleSelectStandardMode = () => {
+    this.emit("generated-map-mode-changed", { enabled: false });
   };
 
   private handleDifficultySelect = (difficulty: Difficulty) => {
@@ -291,11 +303,16 @@ export class GameConfigSettings extends LitElement {
           html`<map-picker
             .selectedMap=${settings.map.selected}
             .useRandomMap=${settings.map.useRandom}
+            .useGeneratedMap=${settings.map.generated?.enabled ?? false}
+            .showGeneratedTab=${Boolean(settings.map.generated)}
             .randomMapDivider=${settings.map.randomMapDivider ?? false}
             .showMedals=${settings.map.showMedals ?? false}
             .mapWins=${settings.map.mapWins ?? new Map()}
+            .generatedPanel=${settings.map.generated?.panel}
             .onSelectMap=${this.handleSelectMap}
             .onSelectRandom=${this.handleSelectRandom}
+            .onSelectGeneratedMode=${this.handleSelectGeneratedMode}
+            .onSelectStandardMode=${this.handleSelectStandardMode}
           ></map-picker>`,
         )}
         ${renderSection(

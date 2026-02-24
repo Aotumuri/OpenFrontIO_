@@ -11,6 +11,7 @@ import { logger } from "./Logger";
 import { MapPlaylist } from "./MapPlaylist";
 import { MasterLobbyService } from "./MasterLobbyService";
 import { renderHtml } from "./RenderHtml";
+import { generatedMapsRootDir } from "./generated/GeneratedMapPaths";
 
 const config = getServerConfigFromServer();
 const playlist = new MapPlaylist();
@@ -39,6 +40,21 @@ app.use(async (req, res, next) => {
     next();
   }
 });
+
+app.use(
+  "/maps/generated",
+  express.static(generatedMapsRootDir(), {
+    maxAge: "1y",
+    immutable: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith(".webp")) {
+        res.setHeader("Content-Type", "image/webp");
+      } else if (filePath.endsWith(".json")) {
+        res.setHeader("Content-Type", "application/json");
+      }
+    },
+  }),
+);
 
 app.use(
   express.static(path.join(__dirname, "../../static"), {

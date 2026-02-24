@@ -201,8 +201,53 @@ const TeamCountConfigSchema = z.union([
 ]);
 export type TeamCountConfig = z.infer<typeof TeamCountConfigSchema>;
 
+const Sha256HexSchema = z.string().regex(/^[a-f0-9]{64}$/i);
+
+export const GeneratedMapParamsSchema = z.object({
+  width: z.number().int().min(64).max(8192),
+  height: z.number().int().min(64).max(8192),
+  macroInfluence: z.number().positive().max(4).optional(),
+  smoothStrength: z.number().min(0).max(1).optional(),
+  riverThickness: z.number().int().min(1).max(25).optional(),
+  seaLevel: z.number().min(0).max(1),
+  minIslandTiles: z.number().int().min(0).max(5000000),
+  minLakeTiles: z.number().int().min(0).max(5000000),
+  nationCountHint: z.number().int().min(1).max(10000).optional(),
+});
+export type GeneratedMapParams = z.infer<typeof GeneratedMapParamsSchema>;
+
+export const MapIntegritySchema = z.object({
+  manifestSha256: Sha256HexSchema,
+  mapSha256: Sha256HexSchema,
+  map4xSha256: Sha256HexSchema,
+  map16xSha256: Sha256HexSchema,
+});
+export type MapIntegrity = z.infer<typeof MapIntegritySchema>;
+
+export const StaticMapRefSchema = z.object({
+  kind: z.literal("static"),
+  map: z.enum(GameMapType),
+});
+
+export const GeneratedMapRefSchema = z.object({
+  kind: z.literal("generated"),
+  generator: z.literal("perlin_islands"),
+  generatorVersion: z.literal(1),
+  seed: z.string().min(1).max(256),
+  params: GeneratedMapParamsSchema,
+  mapId: Sha256HexSchema,
+  integrity: MapIntegritySchema,
+});
+
+export const MapRefSchema = z.union([
+  StaticMapRefSchema,
+  GeneratedMapRefSchema,
+]);
+export type MapRef = z.infer<typeof MapRefSchema>;
+
 export const GameConfigSchema = z.object({
   gameMap: z.enum(GameMapType),
+  mapRef: MapRefSchema.optional(),
   difficulty: z.enum(Difficulty),
   donateGold: z.boolean(), // Configures donations to humans only
   donateTroops: z.boolean(), // Configures donations to humans only
@@ -537,6 +582,7 @@ export const ServerPingMessageSchema = z.object({
 export const ServerPrestartMessageSchema = z.object({
   type: z.literal("prestart"),
   gameMap: z.enum(GameMapType),
+  mapRef: MapRefSchema.optional(),
   gameMapSize: z.enum(GameMapSize),
 });
 

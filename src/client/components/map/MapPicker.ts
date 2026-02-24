@@ -1,4 +1,4 @@
-import { LitElement, html } from "lit";
+import { LitElement, TemplateResult, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   Difficulty,
@@ -23,12 +23,17 @@ const featuredMaps: GameMapType[] = [
 export class MapPicker extends LitElement {
   @property({ type: String }) selectedMap: GameMapType = GameMapType.World;
   @property({ type: Boolean }) useRandomMap = false;
+  @property({ type: Boolean }) useGeneratedMap = false;
+  @property({ type: Boolean }) showGeneratedTab = false;
   @property({ type: Boolean }) showMedals = false;
   @property({ type: Boolean }) randomMapDivider = false;
   @property({ attribute: false }) mapWins: Map<GameMapType, Set<Difficulty>> =
     new Map();
+  @property({ attribute: false }) generatedPanel?: TemplateResult;
   @property({ attribute: false }) onSelectMap?: (map: GameMapType) => void;
   @property({ attribute: false }) onSelectRandom?: () => void;
+  @property({ attribute: false }) onSelectGeneratedMode?: () => void;
+  @property({ attribute: false }) onSelectStandardMode?: () => void;
   @state() private showAllMaps = false;
 
   createRenderRoot() {
@@ -41,6 +46,24 @@ export class MapPicker extends LitElement {
 
   private handleSelectRandomMap = () => {
     this.onSelectRandom?.();
+  };
+
+  private handleSelectFeaturedMapsTab = () => {
+    this.showAllMaps = false;
+    if (this.useGeneratedMap) {
+      this.onSelectStandardMode?.();
+    }
+  };
+
+  private handleSelectAllMapsTab = () => {
+    this.showAllMaps = true;
+    if (this.useGeneratedMap) {
+      this.onSelectStandardMode?.();
+    }
+  };
+
+  private handleSelectGeneratedTab = () => {
+    this.onSelectGeneratedMode?.();
   };
 
   private preventImageDrag(event: DragEvent) {
@@ -108,6 +131,17 @@ export class MapPicker extends LitElement {
     </div>`;
   }
 
+  private renderGeneratedPanel() {
+    if (!this.showGeneratedTab || !this.useGeneratedMap) {
+      return null;
+    }
+    return html`
+      <div class="rounded-xl border border-white/10 bg-black/20 p-4 md:p-5">
+        ${this.generatedPanel ?? html``}
+      </div>
+    `;
+  }
+
   render() {
     return html`
       <div class="space-y-8">
@@ -115,75 +149,99 @@ export class MapPicker extends LitElement {
           <div
             role="tablist"
             aria-label="${translateText("map.map")}"
-            class="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-black/20 p-1"
+            class="grid ${this.showGeneratedTab
+              ? "grid-cols-3"
+              : "grid-cols-2"} gap-2 rounded-xl border border-white/10 bg-black/20 p-1"
           >
             <button
               type="button"
               role="tab"
-              aria-selected=${!this.showAllMaps}
+              aria-selected=${!this.showAllMaps && !this.useGeneratedMap}
               class="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all active:scale-95 ${this
-                .showAllMaps
+                .showAllMaps || this.useGeneratedMap
                 ? "text-white/60 hover:text-white"
                 : "bg-blue-500/20 text-blue-100 shadow-[0_0_12px_rgba(59,130,246,0.2)]"}"
-              @click=${() => (this.showAllMaps = false)}
+              @click=${this.handleSelectFeaturedMapsTab}
             >
               ${translateText("map.featured")}
             </button>
             <button
               type="button"
               role="tab"
-              aria-selected=${this.showAllMaps}
+              aria-selected=${this.showAllMaps && !this.useGeneratedMap}
               class="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all active:scale-95 ${this
-                .showAllMaps
+                .showAllMaps && !this.useGeneratedMap
                 ? "bg-blue-500/20 text-blue-100 shadow-[0_0_12px_rgba(59,130,246,0.2)]"
                 : "text-white/60 hover:text-white"}"
-              @click=${() => (this.showAllMaps = true)}
+              @click=${this.handleSelectAllMapsTab}
             >
               ${translateText("map.all")}
             </button>
+            ${this.showGeneratedTab
+              ? html`<button
+                  type="button"
+                  role="tab"
+                  aria-selected=${this.useGeneratedMap}
+                  class="px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all active:scale-95 ${this
+                    .useGeneratedMap
+                    ? "bg-blue-500/20 text-blue-100 shadow-[0_0_12px_rgba(59,130,246,0.2)]"
+                    : "text-white/60 hover:text-white"}"
+                  @click=${this.handleSelectGeneratedTab}
+                >
+                  ${translateText("generated_map.title")}
+                </button>`
+              : null}
           </div>
         </div>
-        ${this.showAllMaps ? this.renderAllMaps() : this.renderFeaturedMaps()}
-        <div
-          class="w-full ${this.randomMapDivider
-            ? "pt-4 border-t border-white/5"
-            : ""}"
-        >
-          <h4
-            class="text-xs font-bold text-white/40 uppercase tracking-widest mb-4 pl-2"
-          >
-            ${translateText("map_categories.special")}
-          </h4>
-          <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <button
-              type="button"
-              class="w-full h-full p-3 flex flex-col items-center justify-between rounded-xl border cursor-pointer transition-all duration-200 active:scale-95 gap-3 group ${this
-                .useRandomMap
-                ? "bg-blue-500/20 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
-                : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 hover:-translate-y-1"}"
-              @click=${this.handleSelectRandomMap}
-            >
+        ${this.useGeneratedMap && this.showGeneratedTab
+          ? this.renderGeneratedPanel()
+          : html`
+              ${this.showAllMaps
+                ? this.renderAllMaps()
+                : this.renderFeaturedMaps()}
               <div
-                class="w-full aspect-[2/1] relative overflow-hidden rounded-lg bg-black/20"
+                class="w-full ${this.randomMapDivider
+                  ? "pt-4 border-t border-white/5"
+                  : ""}"
               >
-                <img
-                  src=${randomMap}
-                  alt=${translateText("map.random")}
-                  draggable="false"
-                  @dragstart=${this.preventImageDrag}
-                  class="w-full h-full object-cover ${this.useRandomMap
-                    ? "opacity-100"
-                    : "opacity-80"} group-hover:opacity-100 transition-opacity duration-200"
-                />
+                <h4
+                  class="text-xs font-bold text-white/40 uppercase tracking-widest mb-4 pl-2"
+                >
+                  ${translateText("map_categories.special")}
+                </h4>
+                <div
+                  class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+                >
+                  <button
+                    type="button"
+                    class="w-full h-full p-3 flex flex-col items-center justify-between rounded-xl border cursor-pointer transition-all duration-200 active:scale-95 gap-3 group ${this
+                      .useRandomMap
+                      ? "bg-blue-500/20 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
+                      : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 hover:-translate-y-1"}"
+                    @click=${this.handleSelectRandomMap}
+                  >
+                    <div
+                      class="w-full aspect-[2/1] relative overflow-hidden rounded-lg bg-black/20"
+                    >
+                      <img
+                        src=${randomMap}
+                        alt=${translateText("map.random")}
+                        draggable="false"
+                        @dragstart=${this.preventImageDrag}
+                        class="w-full h-full object-cover ${this.useRandomMap
+                          ? "opacity-100"
+                          : "opacity-80"} group-hover:opacity-100 transition-opacity duration-200"
+                      />
+                    </div>
+                    <div
+                      class="text-xs font-bold text-white uppercase tracking-wider text-center leading-tight break-words hyphens-auto"
+                    >
+                      ${translateText("map.random")}
+                    </div>
+                  </button>
+                </div>
               </div>
-              <div
-                class="text-xs font-bold text-white uppercase tracking-wider text-center leading-tight break-words hyphens-auto"
-              >
-                ${translateText("map.random")}
-              </div>
-            </button>
-          </div>
-        </div>
+            `}
       </div>
     `;
   }

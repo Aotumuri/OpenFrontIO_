@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { TemplateResult, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { translateText } from "../client/Utils";
 import { getServerConfigFromClient } from "../core/configuration/ConfigLoader";
@@ -40,6 +40,7 @@ import {
   preventDisallowedKeys,
   toOptionalNumber,
 } from "./utilities/GameConfigHelpers";
+import { resolveGeneratedMap } from "./utilities/GeneratedMapResolver";
 
 @customElement("host-lobby-modal")
 export class HostLobbyModal extends BaseModal {
@@ -73,6 +74,11 @@ export class HostLobbyModal extends BaseModal {
   @state() private lobbyUrlSuffix = "";
   @state() private clients: ClientInfo[] = [];
   @state() private useRandomMap: boolean = false;
+  @state() private useGeneratedMap: boolean = false;
+  @state() private generatedMapSeed: string = generateID();
+  @state() private generatedNationCountHint: number | undefined = undefined;
+  @state() private isStartingGame: boolean = false;
+  @state() private isGeneratingMap: boolean = false;
   @state() private disabledUnits: UnitType[] = [];
   @state() private lobbyCreatorClientID: string = "";
   @state() private nationCount: number = 0;
@@ -81,6 +87,7 @@ export class HostLobbyModal extends BaseModal {
   // Add a new timer for debouncing bot changes
   private botsUpdateTimer: number | null = null;
   private mapLoader = terrainMapFileLoader;
+  private gameConfigUpdateVersion = 0;
 
   private leaveLobbyOnClose = true;
 
@@ -237,8 +244,12 @@ export class HostLobbyModal extends BaseModal {
             .settings=${{
               map: {
                 selected: this.selectedMap,
-                useRandom: this.useRandomMap,
+                useRandom: this.useGeneratedMap ? false : this.useRandomMap,
                 randomMapDivider: true,
+                generated: {
+                  enabled: this.useGeneratedMap,
+                  panel: this.renderGeneratedMapPanel(),
+                },
               },
               difficulty: {
                 selected: this.selectedDifficulty,
@@ -303,6 +314,7 @@ export class HostLobbyModal extends BaseModal {
             }}
             @map-selected=${this.handleConfigMapSelected}
             @random-map-selected=${this.handleConfigRandomMapSelected}
+            @generated-map-mode-changed=${this.handleGeneratedMapModeChanged}
             @difficulty-selected=${this.handleConfigDifficultySelected}
             @game-mode-selected=${this.handleConfigGameModeSelected}
             @team-count-selected=${this.handleConfigTeamCountSelected}
@@ -330,11 +342,13 @@ export class HostLobbyModal extends BaseModal {
           <button
             class="w-full py-4 text-sm font-bold text-white uppercase tracking-widest bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40 hover:-translate-y-0.5 active:translate-y-0 disabled:transform-none"
             @click=${this.startGame}
-            ?disabled=${this.clients.length < 2}
+            ?disabled=${this.clients.length < 2 || this.isStartingGame}
           >
-            ${this.clients.length === 1
-              ? translateText("host_modal.waiting")
-              : translateText("host_modal.start")}
+            ${this.isGeneratingMap
+              ? translateText("map_component.loading")
+              : this.clients.length === 1
+                ? translateText("host_modal.waiting")
+                : translateText("host_modal.start")}
           </button>
         </div>
       </div>
@@ -440,6 +454,9 @@ export class HostLobbyModal extends BaseModal {
     this.randomSpawn = false;
     this.compactMap = false;
     this.useRandomMap = false;
+    this.useGeneratedMap = false;
+    this.generatedMapSeed = generateID();
+    this.generatedNationCountHint = undefined;
     this.disabledUnits = [];
     this.lobbyId = "";
     this.clients = [];
@@ -449,11 +466,17 @@ export class HostLobbyModal extends BaseModal {
     this.goldMultiplierValue = undefined;
     this.startingGold = false;
     this.startingGoldValue = undefined;
+    this.gameConfigUpdateVersion = 0;
+    this.isStartingGame = false;
+    this.isGeneratingMap = false;
 
     this.leaveLobbyOnClose = true;
   }
 
   private async handleSelectRandomMap() {
+    if (this.useGeneratedMap) {
+      return;
+    }
     this.useRandomMap = true;
     this.selectedMap = getRandomMapType();
     await this.loadNationCount();
@@ -465,6 +488,9 @@ export class HostLobbyModal extends BaseModal {
   };
 
   private async handleMapSelection(value: GameMapType) {
+    if (this.useGeneratedMap) {
+      return;
+    }
     this.selectedMap = value;
     this.useRandomMap = false;
     await this.loadNationCount();
@@ -727,20 +753,155 @@ export class HostLobbyModal extends BaseModal {
     this.putGameConfig();
   }
 
+  private setGeneratedMapEnabled(enabled: boolean) {
+    if (this.useGeneratedMap === enabled) {
+      return;
+    }
+
+    this.useGeneratedMap = enabled;
+    if (enabled) {
+      this.useRandomMap = false;
+      if (!this.generatedMapSeed.trim()) {
+        this.generatedMapSeed = generateID();
+      }
+    } else {
+      void this.loadNationCount();
+    }
+    this.putGameConfig();
+  }
+
+  private handleGeneratedMapModeChanged = (e: Event) => {
+    const customEvent = e as CustomEvent<{ enabled: boolean }>;
+    this.setGeneratedMapEnabled(customEvent.detail.enabled);
+  };
+
+  private handleGeneratedMapSeedChange = (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    const trimmed = input.value.trim();
+    this.generatedMapSeed = trimmed || generateID();
+    this.putGameConfig();
+  };
+
+  private handleGeneratedMapNationCountHintKeyDown = (e: KeyboardEvent) => {
+    preventDisallowedKeys(e, ["-", "+", "e", "E", "."]);
+  };
+
+  private handleGeneratedMapNationCountHintChange = (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    const trimmed = input.value.trim();
+    if (!trimmed) {
+      this.generatedNationCountHint = undefined;
+      this.putGameConfig();
+      return;
+    }
+
+    const parsed = parseBoundedIntegerFromInput(input, { min: 1, max: 10000 });
+    if (parsed === undefined) {
+      return;
+    }
+    this.generatedNationCountHint = parsed;
+    this.putGameConfig();
+  };
+
+  private renderGeneratedMapPanel(): TemplateResult {
+    return html`
+      <div>
+        <h4 class="text-sm font-bold text-white uppercase tracking-wider">
+          ${translateText("generated_map.title")}
+        </h4>
+        <p class="text-xs text-white/60 mt-1">
+          ${translateText("generated_map.description")}
+        </p>
+      </div>
+      <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label class="flex flex-col gap-1">
+          <span
+            class="text-xs font-bold uppercase tracking-wider text-white/70"
+          >
+            ${translateText("generated_map.seed")}
+          </span>
+          <input
+            type="text"
+            class="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            .value=${this.generatedMapSeed}
+            placeholder=${translateText("generated_map.seed_placeholder")}
+            @change=${this.handleGeneratedMapSeedChange}
+          />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span
+            class="text-xs font-bold uppercase tracking-wider text-white/70"
+          >
+            ${translateText("generated_map.nation_count_hint")}
+          </span>
+          <input
+            type="number"
+            min="1"
+            max="10000"
+            class="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            .value=${this.generatedNationCountHint?.toString() ?? ""}
+            placeholder=${translateText(
+              "generated_map.nation_count_hint_placeholder",
+            )}
+            @keydown=${this.handleGeneratedMapNationCountHintKeyDown}
+            @change=${this.handleGeneratedMapNationCountHintChange}
+          />
+        </label>
+      </div>
+    `;
+  }
+
   private async putGameConfig() {
+    const updateVersion = ++this.gameConfigUpdateVersion;
     const spawnImmunityTicks = this.spawnImmunityDurationMinutes
       ? this.spawnImmunityDurationMinutes * 60 * 10
       : 0;
+    const gameMapSize = this.compactMap
+      ? GameMapSize.Compact
+      : GameMapSize.Normal;
+    let gameMap = this.selectedMap;
+    let mapRef: GameConfig["mapRef"] = {
+      kind: "static",
+      map: this.selectedMap,
+    };
+
+    if (this.useGeneratedMap) {
+      try {
+        const resolved = await resolveGeneratedMap({
+          gameID: this.lobbyId,
+          seed: this.generatedMapSeed,
+          mapSize: gameMapSize,
+          nationCountHint: this.generatedNationCountHint,
+        });
+        if (updateVersion !== this.gameConfigUpdateVersion) {
+          return;
+        }
+        mapRef = resolved.mapRef;
+        gameMap = resolved.fallbackGameMap;
+        this.nationCount = resolved.manifest.nations.length;
+      } catch (error) {
+        console.warn("Failed to resolve generated map config", error);
+        mapRef = {
+          kind: "static",
+          map: this.selectedMap,
+        };
+        gameMap = this.selectedMap;
+        this.nationCount = 0;
+      }
+    }
+
     const url = await this.constructUrl();
+    if (updateVersion !== this.gameConfigUpdateVersion) {
+      return;
+    }
     this.updateHistory(url);
     this.dispatchEvent(
       new CustomEvent("update-game-config", {
         detail: {
           config: {
-            gameMap: this.selectedMap,
-            gameMapSize: this.compactMap
-              ? GameMapSize.Compact
-              : GameMapSize.Normal,
+            gameMap,
+            mapRef,
+            gameMapSize,
             difficulty: this.selectedDifficulty,
             bots: this.bots,
             infiniteGold: this.infiniteGold,
@@ -780,29 +941,46 @@ export class HostLobbyModal extends BaseModal {
   }
 
   private async startGame() {
-    await this.putGameConfig();
-    console.log(
-      `Starting private game with map: ${GameMapType[this.selectedMap as keyof typeof GameMapType]} ${this.useRandomMap ? " (Randomly selected)" : ""}`,
-    );
-
-    // If the modal closes as part of starting the game, do not leave the lobby
-    this.leaveLobbyOnClose = false;
-
-    const config = await getServerConfigFromClient();
-    const response = await fetch(
-      `${window.location.origin}/${config.workerPath(this.lobbyId)}/api/start_game/${this.lobbyId}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      },
-    );
-
-    if (!response.ok) {
-      this.leaveLobbyOnClose = true;
+    if (this.isStartingGame) {
+      return;
     }
-    return response;
+    this.isStartingGame = true;
+    this.isGeneratingMap = this.useGeneratedMap;
+
+    try {
+      await this.putGameConfig();
+      this.isGeneratingMap = false;
+
+      console.log(
+        `Starting private game with map: ${GameMapType[this.selectedMap as keyof typeof GameMapType]} ${this.useRandomMap ? " (Randomly selected)" : ""}`,
+      );
+
+      // If the modal closes as part of starting the game, do not leave the lobby
+      this.leaveLobbyOnClose = false;
+
+      const config = await getServerConfigFromClient();
+      const response = await fetch(
+        `${window.location.origin}/${config.workerPath(this.lobbyId)}/api/start_game/${this.lobbyId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      if (!response.ok) {
+        this.leaveLobbyOnClose = true;
+        this.isStartingGame = false;
+      }
+      return response;
+    } catch (error) {
+      this.isGeneratingMap = false;
+      this.isStartingGame = false;
+      this.leaveLobbyOnClose = true;
+      console.error("Failed to start private game", error);
+      return;
+    }
   }
 
   private kickPlayer(clientID: string) {

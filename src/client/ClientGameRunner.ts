@@ -104,6 +104,7 @@ export function joinLobby(
         message.gameMap,
         message.gameMapSize,
         terrainMapFileLoader,
+        message.mapRef,
       );
       onPrestart();
     }
@@ -218,6 +219,7 @@ async function createClientGame(
       lobbyConfig.gameStartInfo.config.gameMap,
       lobbyConfig.gameStartInfo.config.gameMapSize,
       mapLoader,
+      lobbyConfig.gameStartInfo.config.mapRef,
     );
   }
   const worker = new WorkerClient(lobbyConfig.gameStartInfo, clientID);

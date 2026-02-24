@@ -40,6 +40,7 @@ export async function createGameRunner(
     gameStart.config.gameMap,
     gameStart.config.gameMapSize,
     mapLoader,
+    gameStart.config.mapRef,
   );
   const random = new PseudoRandom(simpleHash(gameStart.gameID));
 

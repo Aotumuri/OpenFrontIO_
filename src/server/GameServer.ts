@@ -106,6 +106,9 @@ export class GameServer {
     if (gameConfig.gameMap !== undefined) {
       this.gameConfig.gameMap = gameConfig.gameMap;
     }
+    if (gameConfig.mapRef !== undefined) {
+      this.gameConfig.mapRef = gameConfig.mapRef;
+    }
     if (gameConfig.gameMapSize !== undefined) {
       this.gameConfig.gameMapSize = gameConfig.gameMapSize;
     }
@@ -527,6 +530,7 @@ export class GameServer {
     const prestartMsg = ServerPrestartMessageSchema.safeParse({
       type: "prestart",
       gameMap: this.gameConfig.gameMap,
+      mapRef: this.gameConfig.mapRef,
       gameMapSize: this.gameConfig.gameMapSize,
     });
 

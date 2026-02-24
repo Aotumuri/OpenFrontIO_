@@ -16,7 +16,10 @@ import {
   ServerErrorMessage,
 } from "../core/Schemas";
 import { generateID, replacer } from "../core/Util";
-import { CreateGameInputSchema } from "../core/WorkerSchemas";
+import {
+  CreateGameInputSchema,
+  ResolveGeneratedMapRequestSchema,
+} from "../core/WorkerSchemas";
 import { archive, finalizeGameRecord } from "./Archive";
 import { Client } from "./Client";
 import { GameManager } from "./GameManager";
@@ -25,6 +28,7 @@ import { getUserMe, verifyClientToken } from "./jwt";
 import { logger } from "./Logger";
 
 import { GameEnv } from "../core/configuration/Config";
+import { GeneratedMapService } from "./generated/GeneratedMapService";
 import { MapPlaylist } from "./MapPlaylist";
 import { startPolling } from "./PollingLoop";
 import { PrivilegeRefresher } from "./PrivilegeRefresher";
@@ -51,6 +55,7 @@ export async function startWorker() {
   const wss = new WebSocketServer({ noServer: true });
 
   const gm = new GameManager(config, log);
+  const generatedMapService = new GeneratedMapService();
 
   // Initialize lobby service (handles WebSocket upgrade routing)
   const lobbyService = new WorkerLobbyService(server, wss, gm, log);
@@ -107,6 +112,20 @@ export async function startWorker() {
   express.static.mime.define({ "image/webp": ["webp"] });
 
   app.use(express.static(path.join(__dirname, "../../out")));
+  app.use(
+    "/maps/generated",
+    express.static(generatedMapService.outputDir(), {
+      maxAge: "1y",
+      immutable: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".webp")) {
+          res.setHeader("Content-Type", "image/webp");
+        } else if (filePath.endsWith(".json")) {
+          res.setHeader("Content-Type", "application/json");
+        }
+      },
+    }),
+  );
   app.use(
     "/maps",
     express.static(path.join(__dirname, "../../static/maps"), {
@@ -188,6 +207,21 @@ export async function startWorker() {
       `Worker ${workerId}: IP ${ipAnonymize(clientIP)} creating ${game.isPublic() ? GameType.Public : GameType.Private}${gc?.gameMode ? ` ${gc.gameMode}` : ""} game with id ${id}${creatorPersistentID ? `, creator: ${creatorPersistentID.substring(0, 8)}...` : ""}`,
     );
     res.json(game.gameInfo());
+  });
+
+  app.post("/api/maps/resolve", async (req, res) => {
+    const parsed = ResolveGeneratedMapRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: z.prettifyError(parsed.error) });
+    }
+
+    try {
+      const resolved = await generatedMapService.resolve(parsed.data);
+      res.json(resolved);
+    } catch (error) {
+      log.error("Failed to resolve generated map", { error: String(error) });
+      res.status(500).json({ error: "Failed to resolve generated map" });
+    }
   });
 
   // Add other endpoints from your original server

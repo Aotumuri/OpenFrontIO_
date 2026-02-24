@@ -3,12 +3,14 @@ import { GameMapLoader, MapData } from "./GameMapLoader";
 
 export class FetchGameMapLoader implements GameMapLoader {
   private maps: Map<GameMapType, MapData>;
+  private generatedMaps: Map<string, MapData>;
 
   public constructor(
     private readonly prefix: string,
     private readonly cacheBuster?: string,
   ) {
     this.maps = new Map<GameMapType, MapData>();
+    this.generatedMaps = new Map<string, MapData>();
   }
 
   public getMapData(map: GameMapType): MapData {
@@ -35,6 +37,28 @@ export class FetchGameMapLoader implements GameMapLoader {
     } satisfies MapData;
 
     this.maps.set(map, mapData);
+    return mapData;
+  }
+
+  public getGeneratedMapData(mapId: string): MapData {
+    const cachedMap = this.generatedMaps.get(mapId);
+    if (cachedMap) {
+      return cachedMap;
+    }
+
+    const mapData = {
+      mapBin: () =>
+        this.loadBinaryFromUrl(this.url(`generated/${mapId}`, "map.bin")),
+      map4xBin: () =>
+        this.loadBinaryFromUrl(this.url(`generated/${mapId}`, "map4x.bin")),
+      map16xBin: () =>
+        this.loadBinaryFromUrl(this.url(`generated/${mapId}`, "map16x.bin")),
+      manifest: () =>
+        this.loadJsonFromUrl(this.url(`generated/${mapId}`, "manifest.json")),
+      webpPath: this.url(`generated/${mapId}`, "thumbnail.webp"),
+    } satisfies MapData;
+
+    this.generatedMaps.set(mapId, mapData);
     return mapData;
   }
 

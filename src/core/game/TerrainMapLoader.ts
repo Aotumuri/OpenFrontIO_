@@ -1,3 +1,4 @@
+import { MapRef } from "../Schemas";
 import { GameMapSize, GameMapType } from "./Game";
 import { GameMap, GameMapImpl } from "./GameMap";
 import { GameMapLoader } from "./GameMapLoader";
@@ -8,7 +9,7 @@ export type TerrainMapData = {
   miniGameMap: GameMap;
 };
 
-const loadedMaps = new Map<GameMapType, TerrainMapData>();
+const loadedMaps = new Map<string, TerrainMapData>();
 
 export interface MapMetadata {
   width: number;
@@ -34,10 +35,20 @@ export async function loadTerrainMap(
   map: GameMapType,
   mapSize: GameMapSize,
   terrainMapFileLoader: GameMapLoader,
+  mapRef?: MapRef,
 ): Promise<TerrainMapData> {
-  const cached = loadedMaps.get(map);
+  const resolvedMap = mapRef?.kind === "static" ? mapRef.map : map;
+  const cacheKey =
+    mapRef?.kind === "generated"
+      ? `generated:${mapRef.mapId}:${mapSize}`
+      : `static:${resolvedMap}:${mapSize}`;
+
+  const cached = loadedMaps.get(cacheKey);
   if (cached !== undefined) return cached;
-  const mapFiles = terrainMapFileLoader.getMapData(map);
+  const mapFiles =
+    mapRef?.kind === "generated"
+      ? terrainMapFileLoader.getGeneratedMapData(mapRef.mapId)
+      : terrainMapFileLoader.getMapData(resolvedMap);
   const manifest = await mapFiles.manifest();
 
   const gameMap =
@@ -53,8 +64,13 @@ export async function loadTerrainMap(
         )
       : await genTerrainFromBin(manifest.map16x, await mapFiles.map16xBin());
 
+  const nations = manifest.nations.map((nation) => ({
+    ...nation,
+    coordinates: [...nation.coordinates] as [number, number],
+  }));
+
   if (mapSize === GameMapSize.Compact) {
-    manifest.nations.forEach((nation) => {
+    nations.forEach((nation) => {
       nation.coordinates = [
         Math.floor(nation.coordinates[0] / 2),
         Math.floor(nation.coordinates[1] / 2),
@@ -63,11 +79,11 @@ export async function loadTerrainMap(
   }
 
   const result = {
-    nations: manifest.nations,
+    nations,
     gameMap: gameMap,
     miniGameMap: miniMap,
   };
-  loadedMaps.set(map, result);
+  loadedMaps.set(cacheKey, result);
   return result;
 }
 
